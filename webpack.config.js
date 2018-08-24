@@ -2,7 +2,7 @@
 
 module.exports = {
 	mode: "development", //as opposed to production
-	entry: "src/app.js",
+	entry: "./src/app.js",
 	output: {
 		path: __dirname + "/builds/",
 		filename: "bundle.js"
