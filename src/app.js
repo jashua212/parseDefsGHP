@@ -1,6 +1,9 @@
-﻿/* global fabric:true, Office:true, OfficeExtension:true, Word:true */
+﻿/* global fabric:true, Office:true, Word:true */
 
 'use strict';
+
+// load appUtilities module using es6 syntax (supported by webpack)
+import * as util from './appUtilities.js';
 
 (function () {
 	var messageBanner;
@@ -69,7 +72,7 @@
 		var userTerms = docx.settings.get('userTerms-' + cmd) || [];
 		if (userTerms.indexOf(inpVal) === -1) {
 			userTerms.push(inpVal);
-			userTerms.sort(sortByAlphabet);
+			userTerms.sort(util.sortByAlphabet);
 			docx.settings.set('userTerms-' + cmd, userTerms);
 			docx.settings.saveAsync();
 		}
@@ -121,170 +124,6 @@
 		messageBanner.toggleExpansion();
 	}
 
-	/* Utility Functions */
-	function errHandler(error) {
-		console.log("Error: " + error);
-
-		if (error instanceof OfficeExtension.Error) {
-			console.log("Debug info: " + JSON.stringify(error.debugInfo));
-		}
-	}
-
-	function createRexFromString(string, flags) {
-		var escapedString = string.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
-		return new RegExp(escapedString, flags);
-	}
-
-	function sortByAlphabet(A, B) {
-		var a = A.toLowerCase();
-		var b = B.toLowerCase();
-
-		if (a < b) {
-			return -1;
-		}
-		if (a > b) {
-			return 1;
-		}
-		return 0; //default return value (no sorting)
-	}
-
-	function sortByLongerLength(A, B) {
-		var a = A.length;
-		var b = B.length;
-
-		if (a > b) {
-			return -1;
-		}
-		if (a < b) {
-			return 1;
-		}
-		return 0; //default return value (no sorting)
-	}
-
-	function sortObject(src, comparator) {
-		var out = Object.create(null);
-
-		Object.keys(src).sort(comparator).forEach(function (key) {
-			if (typeof src[key] == 'object' &&
-				!Array.isArray(src[key]) &&
-				!(src[key] instanceof RegExp)
-			) {
-				out[key] = sortObject(src[key], comparator); //run function again
-				return;
-			} else {
-				out[key] = src[key];
-			}
-		});
-
-		return out;
-	}
-
-	function mergeObjects(target, src) {
-		var a = target || Object.create(null);
-		var b = src || Object.create(null);
-
-		// merge b into a
-		Object.keys(b).forEach(function (key) {
-			a[key] = (a[key] || 0) + (b[key] || 0);
-		});
-	}
-
-	function mergeWithinObject(a, retainWord) {
-		// helper function
-		function mergeEntries(subObject, key) {
-			subObject[retainWord] = (subObject[retainWord] || 0) + subObject[key];
-			delete subObject[key];
-		}
-
-		Object.keys(a).forEach(function (mainKey) {
-			if (mainKey !== 'defined') {
-				var subObject = a[mainKey];
-				// console.log('subObject', subObject);
-
-				Object.keys(subObject).forEach(function (key) {
-					if (/s$/.test(retainWord)) {
-						// retainWord is plural, so merge singular key into plural
-						if (retainWord === key + 's') {
-							mergeEntries(subObject, key);
-						}
-					} else {
-						// retainWord is singular, so merge plural key into singular
-						if (key === retainWord + 's') {
-							mergeEntries(subObject, key);
-						}
-					}
-				});
-			}
-		});
-	}
-
-	function addBullet(strOrObj) {
-		var string = typeof strOrObj === 'object' ? strOrObj[0] : strOrObj;
-		return string.replace(/^/, '• ');
-	}
-
-	function createFirstTable(pojo) {
-		var tableArray = [
-			['May be Circular', 'Used But Not Defined in Selection'] //header row
-		];
-		var circularTerms = pojo.circular.length ? pojo.circular.map(function (pathArray) {
-			return pathArray.join(' ->\r\n').replace(/^/, '• ');
-		}).join('\r\n') : '';
-		var notDefinedTerms = pojo.notDefined ? pojo.notDefined.map(addBullet).join('\r\n') : '';
-		var rowArray = [];
-		rowArray.push(circularTerms);
-		rowArray.push(notDefinedTerms);
-		tableArray.push(rowArray);
-
-		return tableArray;
-	}
-
-	function createSecondTable(pojo) {
-		var tableArray = [
-			['Cross-Reference Definitions'] //header row
-		];
-		var crossRefs = pojo.crossRefs.length ? pojo.crossRefs.map(addBullet).join('\r\n') : '';
-		var rowArray = [];
-		rowArray.push(crossRefs);
-		tableArray.push(rowArray);
-
-		return tableArray;
-	}
-
-	function createMainTable(pojo) {
-		var tableArray = [
-			['Term', 'Incorporates', 'Used By', 'Defined in Selection'] //header row
-		];
-
-		Object.keys(pojo).forEach(function (dt) {
-			var incorpsObj = pojo[dt].incorps;
-			var incorpsTerms = incorpsObj ? Object.keys(incorpsObj).map(addBullet).join('\r\n') : '';
-			var usedByObj = pojo[dt].usedBy;
-			var usedByTerms = usedByObj ? Object.keys(usedByObj).map(addBullet).join('\r\n') : '';
-
-			var definedVal = pojo[dt].defined ? pojo[dt].defined : 0;
-			var definedTerm = definedVal === 1 ? 'yes' : (definedVal === 2 ? 'yes per user' : '');
-
-			var rowArray = [];
-			rowArray.push(dt);
-			rowArray.push(incorpsTerms);
-			rowArray.push(usedByTerms);
-			rowArray.push(definedTerm);
-			tableArray.push(rowArray);
-		});
-
-		return tableArray;
-	}
-
-	function insertTable(docBody, tableArray) {
-		return docBody.insertTable(
-			tableArray.length, //rowLength
-			tableArray[0].length, //columnLength
-			Word.InsertLocation.end, //insertPosition
-			tableArray
-		);
-	}
-
 	/* Operative Function */
 	function parseParas() {
 		Word.run(function (context) {
@@ -319,7 +158,7 @@
 							return qt.replace(/[“”,]/g, '');
 						})
 						.forEach(function (dt) {
-							rexPojo[dt] = createRexFromString(dt, 'g'); //put in rexPojo
+							rexPojo[dt] = util.createRexFromString(dt, 'g'); //put in rexPojo
 						});
 					}
 				});
@@ -329,12 +168,12 @@
 				// also, store them in a variable for adjustments below
 				var userTermsAdded = (Office.context.document.settings.get('userTerms-add') || []);
 				userTermsAdded.forEach(function (uta) {
-					rexPojo[uta] = createRexFromString(uta, 'g'); //put in rexPojo
+					rexPojo[uta] = util.createRexFromString(uta, 'g'); //put in rexPojo
 				});
 
 				// sort rexPojo by length (so longer ones get removed from para first per below, and
 				// avoid creating fragments of defined terms that would be caught later by init caps)
-				var sortedRexPojo = sortObject(rexPojo, sortByLongerLength); /*key*/
+				var sortedRexPojo = util.sortObject(rexPojo, util.sortByLongerLength); /*key*/
 				// console.log('sortedRexPojo', sortedRexPojo);
 
 				/* 'INCORPS' PASS */
@@ -448,7 +287,7 @@
 					}
 				});
 
-				var sortedPojo = sortObject(pojo, sortByAlphabet);
+				var sortedPojo = util.sortObject(pojo, util.sortByAlphabet);
 				// console.log('debug sortedPojo', sortedPojo);
 
 				/* PLURAL PASS */
@@ -462,11 +301,11 @@
 							if (sortedPojo[plural].defined && !sortedPojo[singular].defined) {
 								// retain plural form (as target)
 								retainWords.push(plural);
-								mergeObjects(
+								util.mergeObjects(
 									sortedPojo[plural].incorps,
 									sortedPojo[singular].incorps
 								);
-								mergeObjects(
+								util.mergeObjects(
 									sortedPojo[plural].usedBy,
 									sortedPojo[singular].usedBy
 								);
@@ -475,11 +314,11 @@
 							} else if (!sortedPojo[plural].defined) {
 								// retain singular form (as target)
 								retainWords.push(singular);
-								mergeObjects(
+								util.mergeObjects(
 									sortedPojo[singular].incorps,
 									sortedPojo[plural].incorps
 								);
-								mergeObjects(
+								util.mergeObjects(
 									sortedPojo[singular].usedBy,
 									sortedPojo[plural].usedBy
 								);
@@ -492,7 +331,7 @@
 				// merge plural/singular terms contained within each object in sortedPojo
 				retainWords.forEach(function (word) {
 					Object.keys(sortedPojo).forEach(function (term) {
-						mergeWithinObject(sortedPojo[term], word);
+						util.mergeWithinObject(sortedPojo[term], word);
 					});
 				});
 
@@ -583,25 +422,25 @@
 					return context.sync(); //bail
 				}
 
-				var firstTableArray = createFirstTable(analysisPojo);
-				var secondTableArray = createSecondTable(analysisPojo);
-				var mainTableArray = createMainTable(sortedPojo);
+				var firstTableArray = util.createFirstTable(analysisPojo);
+				var secondTableArray = util.createSecondTable(analysisPojo);
+				var mainTableArray = util.createMainTable(sortedPojo);
 				var newDoc = context.application.createDocument();
 				context.load(newDoc);
 
 				return context.sync().then(function () {
 					// console.log('newDoc', newDoc);
-					var firstTable = insertTable(newDoc.body, firstTableArray);
+					var firstTable = util.insertTable(newDoc.body, firstTableArray);
 					firstTable.headerRowCount = 1;
 					firstTable.style = 'List Table 4 - Accent 1';
 					firstTable.styleFirstColumn = false;
 
-					var secondTable = insertTable(newDoc.body, secondTableArray);
+					var secondTable = util.insertTable(newDoc.body, secondTableArray);
 					secondTable.headerRowCount = 1;
 					secondTable.style = 'List Table 4 - Accent 1';
 					secondTable.styleFirstColumn = false;
 
-					var mainTable = insertTable(newDoc.body, mainTableArray);
+					var mainTable = util.insertTable(newDoc.body, mainTableArray);
 					mainTable.headerRowCount = 1;
 					mainTable.style = 'List Table 4 - Accent 1';
 
@@ -610,12 +449,12 @@
 
 						return context.sync();
 					})
-					.catch(errHandler);
+					.catch(util.errHandler);
 				})
-				.catch(errHandler);
+				.catch(util.errHandler);
 			})
-			.catch(errHandler);
+			.catch(util.errHandler);
 		})
-		.catch(errHandler);
+		.catch(util.errHandler);
 	}
 })();
