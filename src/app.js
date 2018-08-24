@@ -1,4 +1,4 @@
-﻿/* global fabric:true, Office:true, Word:true */
+/* global fabric:true, Office:true, Word:true */
 
 'use strict';
 
