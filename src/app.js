@@ -7,6 +7,7 @@ import * as util from './appUtilities.js';
 
 (function () {
 	var messageBanner;
+	var allRangeLength = 0;
 
 	Office.initialize = function () {
 		$(document).ready(function () {
@@ -30,9 +31,6 @@ import * as util from './appUtilities.js';
 				});
 			});
 
-			$('#parse-button').on('click', parseParas);
-			$('#button-text').text('Parse Selected Definitions');
-
 			$('#user-term-add').on('keydown', function (e) {
 				if (e.keyCode === 13) {
 					keydownHandler('add', $(this));
@@ -50,6 +48,12 @@ import * as util from './appUtilities.js';
 			$('#user-terms-minus-container').on('click', '.user-term', function () {
 				removeClickHandler('minus', $(this));
 			});
+
+			$('#select-btn').on('click', selectAll);
+			$('#select-btn-text').text('Select All');
+
+			$('#parse-btn').on('click', parseParas);
+			$('#parse-btn-text').text('Parse Selected');
 		});
 	};
 
@@ -124,19 +128,54 @@ import * as util from './appUtilities.js';
 		messageBanner.toggleExpansion();
 	}
 
-	/* Operative Function */
-	function parseParas() {
+	/* Operative Functions */
+	function selectAll() {
 		Word.run(function (context) {
-			/* var data = context.document.body.paragraphs; */
-			var data = context.document.getSelection().paragraphs;
-			context.load(data, 'text');
+			// queue command to select whole doc
+			context.document.body.select();
+
+			// queue command to load/return all the paragraphs as a range
+			var allRange = context.document.body.paragraphs;
+			context.load(allRange, 'text');
 
 			return context.sync().then(function () {
-				var paras = [];
-				data.items.forEach(function (item) {
-					paras.push(item.text.trim());
-				});
-				// console.log(paras);
+				// if successful, store allRange.items.length in global var
+				allRangeLength = allRange.items.length;
+				console.log('allRangeLength', allRangeLength);
+			});
+		})
+		.catch(util.errHandler);
+	}
+
+	function parseParas() {
+		Word.run(function (context) {
+			// queue command to load/return all the paragraphs in the current selection as a range
+			var selRange = context.document.getSelection().paragraphs;
+			context.load(selRange, 'text');
+
+			return context.sync().then(function () {
+				console.log('selRange', selRange);
+
+				var paras = selRange.items.map(function (p) {
+						return p.text.trim();
+					});
+
+				console.log('selRange.items.length', selRange.items.length);
+
+				// check global var to confirm that whole doc is still selected
+				if (selRange.items.length === allRangeLength) {
+					// if so, trim paragraph collection (in place) from the end
+					let revLastIndex = paras.slice(0).reverse()
+						.findIndex(function (item) {
+							return /^“[^“]+”/.test(item);
+						});
+					paras.splice((revLastIndex * -1));
+					console.log('SPLICED PARAS', paras);
+
+				} else {
+					// otherwise, reset global var and don't trim paragraph collection
+					allRangeLength = 0;
+				}
 
 				/* START HERE */
 				var rexPojo = Object.create(null);
