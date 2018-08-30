@@ -154,15 +154,13 @@ import * as util from './appUtilities.js';
 			context.load(selRange, 'text');
 
 			return context.sync().then(function () {
-				console.log('selRange', selRange);
-
 				var paras = selRange.items.map(function (p) {
 						return p.text.trim();
 					});
 
 				console.log('selRange.items.length', selRange.items.length);
 
-				// check global var to confirm that whole doc is still selected
+				// check agst global var to confirm that whole doc is still selected
 				if (selRange.items.length === allRangeLength) {
 					// if so, trim paragraph collection (in place) from the end
 					let revLastIndex = paras.slice(0).reverse()
