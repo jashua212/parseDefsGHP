@@ -157,11 +157,10 @@ import * as util from './appUtilities.js';
 				var paras = selRange.items.map(function (p) {
 						return p.text.trim();
 					});
-
-				console.log('selRange.items.length', selRange.items.length);
+				console.log('paras.length', paras.length);
 
 				// check agst global var to confirm that whole doc is still selected
-				if (selRange.items.length === allRangeLength) {
+				if (paras.length === allRangeLength) {
 					// if so, trim paragraph collection (in place) from the end
 					let revLastIndex = paras.slice(0).reverse()
 						.findIndex(function (item) {
