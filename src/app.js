@@ -147,6 +147,23 @@ import * as util from './appUtilities.js';
 		.catch(util.errHandler);
 	}
 
+	function getCrossRefDefs(paras) {
+		const rexFirstSentence = /^.+?\.(?:\s|$)/;
+		return paras
+			.map(function (p) {
+				return p.match(rexFirstSentence);
+			})
+			.filter(function (sentence) {
+				return /\b(meaning|defined|definition)s*?\b/.test(sentence);
+			})
+			.filter(function (sentence) {
+				return /^“/.test(sentence);
+			})
+			.filter(function (sentence) {
+				return sentence[0].split(' ').length < 30;
+			});
+	}
+
 	function parseParas() {
 		Word.run(function (context) {
 			// queue command to load/return all the paragraphs in the current selection as a range
@@ -433,20 +450,7 @@ import * as util from './appUtilities.js';
 					});
 
 				/* Pick cross-referenced definitions */
-				var rexFirstSentence = /^.+?\.(?:\s|$)/;
-				analysisPojo.crossRefs = paras.map(function (p) {
-						return p.match(rexFirstSentence);
-					})
-					.filter(function (sentence) {
-						return /\b(meaning|defined|definition)s*?\b/.test(sentence);
-					})
-					.filter(function (sentence) {
-						return /^“/.test(sentence);
-					})
-					.filter(function (sentence) {
-						return sentence[0].split(' ').length < 30;
-					});
-
+				analysisPojo.crossRefs = getCrossRefDefs(paras);
 				// console.log(JSON.stringify(analysisPojo, null, 5));
 				/* END HERE */
 
