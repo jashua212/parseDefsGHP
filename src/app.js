@@ -1,13 +1,13 @@
-/* global fabric:true, Office:true, Word:true */
+/* global util:true, fabric:true, Office:true, OfficeExtension:true, Word:true */
 
 'use strict';
 
-// load appUtilities module using es6 syntax (supported by webpack)
-import * as util from './appUtilities.js';
+// load appUtilities module using commonJS syntax
+const util = require('./appUtilities.js');
 
 (function () {
 	var messageBanner;
-	var allRangeLength = 0;
+	// var allRangeLength = 0;
 
 	Office.initialize = function () {
 		$(document).ready(function () {
@@ -49,8 +49,8 @@ import * as util from './appUtilities.js';
 				removeClickHandler('minus', $(this));
 			});
 
-			$('#select-btn').on('click', selectAll);
-			$('#select-btn-text').text('Select All');
+			$('#select-btn').on('click', selectDefParas);
+			$('#select-btn-text').text('Select Definition Paragraphs');
 
 			$('#parse-btn').on('click', parseParas);
 			$('#parse-btn-text').text('Parse Selected');
@@ -128,8 +128,21 @@ import * as util from './appUtilities.js';
 		messageBanner.toggleExpansion();
 	}
 
+	function errHandler(error) {
+		console.log("Error: " + error);
+
+		if (error instanceof OfficeExtension.Error) {
+			console.log("Debug info: " + JSON.stringify(error.debugInfo));
+
+		} else if (/TypeError: Unable to get property 'getRange'/.test(error)) {
+			var header = 'Error:';
+			var content = 'There are no definition paragraphs to select';
+			showNotification(header, content);
+		}
+	}
+
 	/* Operative Functions */
-	function selectAll() {
+	/* function selectAll() {
 		Word.run(function (context) {
 			// queue command to select whole doc
 			context.document.body.select();
@@ -144,7 +157,62 @@ import * as util from './appUtilities.js';
 				console.log('allRangeLength', allRangeLength);
 			});
 		})
-		.catch(util.errHandler);
+		.catch(errHandler);
+	} */
+
+	function bifurcateParas(paras) {
+		const rexqtBeginning = /^(\(\w{1,3}\)\s+?)“[^”]+”/;
+
+		let startIndex = paras
+			.findIndex(function (p) {
+				return rexqtBeginning.test(p);
+			});
+
+		let revStartIndex = paras.slice(0).reverse()
+			.findIndex(function (p) {
+				return rexqtBeginning.test(p);
+			});
+		let endIndex = paras.length - (revStartIndex + 1);
+
+		/* let defParas = paras
+			.filter(function (p, i) {
+				return i >= startIndex && i <= endIndex;
+			});
+
+		let plainParas = paras
+			.filter(function (p, i) {
+				return i < startIndex || i > endIndex;
+			});
+
+		return [defParas, plainParas]; */
+
+		return [startIndex, endIndex];
+	}
+
+	function selectDefParas() {
+		Word.run(function (context) {
+			// queue command to load/return all the paragraphs as a range
+			var allRange = context.document.body.paragraphs;
+			context.load(allRange, 'text');
+
+			return context.sync().then(function () {
+				var allParas = allRange.items.map(function (p) {
+					return p.text.trim();
+				});
+
+				var indices = bifurcateParas(allParas);
+				var startIndex = indices[0];
+				var endIndex = indices[1];
+				var startRange = allRange.items[startIndex].getRange();
+				var endRange = allRange.items[endIndex].getRange();
+
+				var expandedRange = endRange.expandTo(startRange);
+				expandedRange.select();
+
+				return context.sync();
+			});
+		})
+		.catch(errHandler);
 	}
 
 	function getCrossRefDefs(paras) {
@@ -153,6 +221,9 @@ import * as util from './appUtilities.js';
 			.map(function (p) {
 				return p.match(rexFirstSentence);
 			})
+			.reduce(function (accumArray, matchArray) {
+				return accumArray.concat(matchArray); //flatten into a single array of strings
+			}, [])
 			.filter(function (sentence) {
 				return /\b(meaning|defined|definition)s*?\b/.test(sentence);
 			})
@@ -165,6 +236,9 @@ import * as util from './appUtilities.js';
 	}
 
 	function parseParas() {
+		keydownHandler('add', $('#user-term-add'));
+		keydownHandler('minus', $('#user-term-minus'));
+
 		Word.run(function (context) {
 			// queue command to load/return all the paragraphs in the current selection as a range
 			var selRange = context.document.getSelection().paragraphs;
@@ -172,16 +246,16 @@ import * as util from './appUtilities.js';
 
 			return context.sync().then(function () {
 				var paras = selRange.items.map(function (p) {
-						return p.text.trim();
-					});
-				console.log('paras.length', paras.length);
+					return p.text.trim();
+				});
+				// console.log('paras.length', paras.length);
 
 				// check agst global var to confirm that whole doc is still selected
-				if (paras.length === allRangeLength) {
+				/* if (paras.length === allRangeLength) {
 					// if so, trim paragraph collection (in place) from the end
 					let revLastIndex = paras.slice(0).reverse()
 						.findIndex(function (item) {
-							return /^“[^“]+”/.test(item);
+							return /^“[^”]+”/.test(item);
 						});
 					paras.splice((revLastIndex * -1));
 					console.log('SPLICED PARAS', paras);
@@ -189,17 +263,12 @@ import * as util from './appUtilities.js';
 				} else {
 					// otherwise, reset global var and don't trim paragraph collection
 					allRangeLength = 0;
-				}
+				} */
 
 				/* START HERE */
 				var rexPojo = Object.create(null);
-				var pojo = Object.create(null);
-
-				var rexqtPhrase = /^“[^“]+”([^“]{1,7}“[^“]+”)*/;
-				var rexqts = /“[^“]+”/g;
-				var rexInitCaps = /((([A-Z][\w\-]+|\d{4})\s?(of|and)?\s?)(\d{4}(\-\d{1,2})?\s?)?)+/g;
-				var rexLeadArticles = /^(A|An|If|The|This|That|Each|Such|Every)\s/;
-				var badLoneWords = ['for', 'with', 'each', 'if', 'the', 'this', 'none', 'such', 'every', 'in', 'on'];
+				var rexqtPhrase = /^(\(\w{1,3}\)\s+?)“[^”]+”([^”]{1,7}“[^”]+”)*/;
+				var rexqts = /“[^”]+”/g;
 
 				/* 'REXPOJO' PASS */
 				// populate rexPojo with every quoted term appearing at the beginning of each para
@@ -207,12 +276,12 @@ import * as util from './appUtilities.js';
 					var qtPhrase = p.match(rexqtPhrase);
 					if (qtPhrase) {
 						(qtPhrase[0].match(rexqts) || [])
-						.map(function (qt) {
-							return qt.replace(/[“”,]/g, '');
-						})
-						.forEach(function (dt) {
-							rexPojo[dt] = util.createRexFromString(dt, 'g'); //put in rexPojo
-						});
+							.map(function (qt) {
+								return qt.replace(/[“”\,]/g, '');
+							})
+							.forEach(function (dt) {
+								rexPojo[dt] = util.createRexFromString(dt, 'g'); //put in rexPojo
+							});
 					}
 				});
 				// console.log('rexPojo before adding userTerms', rexPojo);
@@ -231,12 +300,21 @@ import * as util from './appUtilities.js';
 
 				/* 'INCORPS' PASS */
 				// populate 'incorps'
+				var sortedRexPojoLowerCaseKeys = Object.keys(sortedRexPojo).map(function (key) {
+						return key.toLowerCase();
+					});
+				var pojo = Object.create(null);
 				var last_dts;
+				var rexInitCaps = /((([A-Z][\w\-]+|\d{4})\s?(of|and|to)?\s?)(\d{4}(\-\d{1,2})?\s?)?)+/g;
+				var rexLeadArticles = /^(A|An|If|The|This|That|Each|Such|Every|Following)\s/;
+				var badLoneWords = ['by', 'name', 'title', 'date', 'for', 'with', 'each', 'if', 'the', 'this', 'none', 'such', 'every', 'in', 'on'];
+
 				paras.forEach(function (p) {
 					var dts;
 					var qtPhrase = p.match(rexqtPhrase);
 					if (qtPhrase) {
-						last_dts = dts = qtPhrase[0].match(rexqts).map(function (qt) {
+						last_dts = dts = (qtPhrase[0].match(rexqts) || [])
+						.map(function (qt) {
 							return qt.replace(/[“”\,]/g, '');
 						});
 						// the above replicates the rexPojo Pass, except that, here, we track last_dts
@@ -251,11 +329,54 @@ import * as util from './appUtilities.js';
 						}
 						pojo[t].defined = 1; //track if t is a "defined term"
 
-						// apply sortedRexPojo
-						Object.keys(sortedRexPojo).forEach(function (rex) {
+						// apply sortedRexPojo to find incorporated terms in para
+						Object.keys(sortedRexPojo).forEach(function (key) {
+							var rex = sortedRexPojo[key];
 							(p.match(rex) || [])
+								.filter(function (n) {
+									return dts.indexOf(n) === -1; //exclude any defined terms (i.e., itself)
+								})
+								.forEach(function (n) {
+									if (!pojo[t].incorps) {
+										pojo[t].incorps = Object.create(null);
+									}
+									pojo[t].incorps[n] = (pojo[t].incorps[n] + 1) || 1;
+								});
+
+							// lowercase defined term in para to avoid catching fragments later /*key*/
+							p = p.replace(rex, function (match) {
+								return match.toLowerCase();
+							});
+						});
+
+						// console.log('p', p);
+
+						// apply init caps, after applying sortedRexPojo
+						(p.match(/“[^”]+”/g) || []) //get all quoted terms contained in the p
+							.map(function (qt) {
+								return qt.replace(/[“”\,]/g, ''); //remove their quotation marks
+							})
+							.filter(function (dt) {
+								return sortedRexPojoLowerCaseKeys.indexOf(dt) === -1; //exclude those caught by rexPojo pass
+							})
+							.filter(function (dt) {
+								return /^[a-z]/.test(dt); //keep those whose first letter is lower case
+							})
+							.concat(p.match(rexInitCaps) || []) //CONCAT with new array of init caps
+
+							.map(function (n) {
+								return n.trim() //trim leading and trailing spaces
+									.replace(rexLeadArticles, '') //trim leading articles
+									.replace(/\s(of|and|to)$/, ''); //trim trailing of|and|to;
+							})
 							.filter(function (n) {
-								return dts.indexOf(n) === -1; //exclude any defined terms (i.e., itself)
+								return n.length && dts.indexOf(n) === -1; //exclude any defined terms
+							})
+							.filter(function (n) {
+								return badLoneWords.indexOf(n.toLowerCase()) === -1; //exclude badLoneWords
+							})
+							.filter(function (n) {
+								return !/^\d+$/.test(n); //exclude number-only strings
 							})
 							.forEach(function (n) {
 								if (!pojo[t].incorps) {
@@ -263,40 +384,6 @@ import * as util from './appUtilities.js';
 								}
 								pojo[t].incorps[n] = (pojo[t].incorps[n] + 1) || 1;
 							});
-
-							// remove rex from para to avoid catching fragments later /*key*/
-							p = p.replace(rex, '');
-						});
-
-						// apply init caps
-						(p.match(/“[^“]+”/g) || []) //get all quoted terms contained in the p
-						.map(function (qt) {
-							return qt.replace(/[“”\,]/g, ''); //remove their quotation marks
-						})
-						.filter(function (dt) {
-							return /^[a-z]/.test(dt); //keep those whose first letter is lower case
-						})
-						.concat(p.match(rexInitCaps) || []) //CONCAT with new array of init caps
-						.map(function (n) {
-							return n.trim() //trim leading and trailing spaces
-								.replace(rexLeadArticles, '') //trim leading articles
-								.replace(/\s(of|and)$/, ''); //trim trailing of|and;
-						})
-						.filter(function (n) {
-							return n.length && dts.indexOf(n) === -1; //exclude any defined terms
-						})
-						.filter(function (n) {
-							return badLoneWords.indexOf(n.toLowerCase()) === -1; //exclude badLoneWords
-						})
-						.filter(function (n) {
-							return !/^\d+$/.test(n); //exclude number-only strings
-						})
-						.forEach(function (n) {
-							if (!pojo[t].incorps) {
-								pojo[t].incorps = Object.create(null);
-							}
-							pojo[t].incorps[n] = (pojo[t].incorps[n] + 1) || 1;
-						});
 					});
 				});
 
@@ -312,7 +399,16 @@ import * as util from './appUtilities.js';
 
 							if (incorpsObj) {
 								Object.keys(incorpsObj).forEach(function (term) {
-									if (term === utm) {
+									if (term === utm ||
+										// utm is plural
+										term + 's' === utm ||
+										term + 'es' === utm ||
+										term.substring(0, term.length - 1) + 'ies' === utm ||
+										// utm is singular
+										utm + 's' === term ||
+										utm + 'es' === term ||
+										utm.substring(0, utm.length - 1) + 'ies' === term
+									) {
 										delete pojo[key].incorps[term];
 									}
 								});
@@ -344,49 +440,60 @@ import * as util from './appUtilities.js';
 				// console.log('debug sortedPojo', sortedPojo);
 
 				/* PLURAL PASS */
-				var retainWords = [];
-				Object.keys(sortedPojo).forEach(function (plural, i, self) {
+				var arrayOfWordPairs = []; //an array of arrays
+
+				Object.keys(sortedPojo).forEach(function (second, i, self) {
 					if (i > 0) {
-						var singular = self[i - 1]; //previous key
+						var first = self[i - 1]; //previous key
+						var trimOneFromEnd = second.length - 1;
+						// console.log(second.substring(0, trimOneFromEnd) + 'ies' === first);
 
-						if (plural === singular + 's') {
-							// console.log(singular, '+s ===', plural);
-							if (sortedPojo[plural].defined && !sortedPojo[singular].defined) {
-								// retain plural form (as target)
-								retainWords.push(plural);
-								util.mergeObjects(
-									sortedPojo[plural].incorps,
-									sortedPojo[singular].incorps
-								);
-								util.mergeObjects(
-									sortedPojo[plural].usedBy,
-									sortedPojo[singular].usedBy
-								);
-								delete sortedPojo[singular];
+						if ((second === first + 's') ||
+							(second === first + 'es') ||
+							(second.substring(0, trimOneFromEnd) + 'ies' === first)
+						) {
+							// console.log('first', first, sortedPojo[first].incorps || {});
+							// console.log('second', second, sortedPojo[second].incorps) || {};
 
-							} else if (!sortedPojo[plural].defined) {
-								// retain singular form (as target)
-								retainWords.push(singular);
+							if (sortedPojo[second].defined && !sortedPojo[first].defined) {
+								// retain second form (as target)
+								arrayOfWordPairs.push([second, first]);
 								util.mergeObjects(
-									sortedPojo[singular].incorps,
-									sortedPojo[plural].incorps
+									sortedPojo[second].incorps,
+									sortedPojo[first].incorps
 								);
 								util.mergeObjects(
-									sortedPojo[singular].usedBy,
-									sortedPojo[plural].usedBy
+									sortedPojo[second].usedBy,
+									sortedPojo[first].usedBy
 								);
-								delete sortedPojo[plural];
+								delete sortedPojo[first];
+
+							} else if (!sortedPojo[second].defined) {
+								// retain first form (as target)
+								arrayOfWordPairs.push([first, second]);
+								util.mergeObjects(
+									sortedPojo[first].incorps,
+									sortedPojo[second].incorps
+								);
+								util.mergeObjects(
+									sortedPojo[first].usedBy,
+									sortedPojo[second].usedBy
+								);
+								delete sortedPojo[second];
 							}
 						}
 					}
 				});
 
 				// merge plural/singular terms contained within each object in sortedPojo
-				retainWords.forEach(function (word) {
+				arrayOfWordPairs.forEach(function (wordPair) {
+					console.log(wordPair);
 					Object.keys(sortedPojo).forEach(function (term) {
-						util.mergeWithinObject(sortedPojo[term], word);
+						util.mergeWithinObject(sortedPojo[term], wordPair);
 					});
 				});
+
+				console.log('arrayOfWordPairs', arrayOfWordPairs);
 
 				/* ANALYSIS PASS */
 				var analysisPojo = Object.create(null);
@@ -411,6 +518,7 @@ import * as util from './appUtilities.js';
 
 				/* Find circular terms */
 				var circularPaths = [];
+
 				function walker(caller, target, path, depth) {
 					if (sortedPojo[caller].incorps) {
 						Object.keys(sortedPojo[caller].incorps).forEach(function (n) {
@@ -422,7 +530,7 @@ import * as util from './appUtilities.js';
 								// clone.push(n); //can't push n b/c that screws up removal of dupes
 								circularPaths.push(clone);
 
-							} else if (sortedPojo[n].incorps) {
+							} else if (sortedPojo[n] && sortedPojo[n].incorps) {
 								if (clone.length < depth && clone.indexOf(n) === -1) {
 									clone.push(n);
 									walker(n, target, clone, depth); //recursively invoke walker
@@ -488,13 +596,10 @@ import * as util from './appUtilities.js';
 						newDoc.open();
 
 						return context.sync();
-					})
-					.catch(util.errHandler);
-				})
-				.catch(util.errHandler);
-			})
-			.catch(util.errHandler);
+					});
+				});
+			});
 		})
-		.catch(util.errHandler);
+		.catch(errHandler);
 	}
 })();
