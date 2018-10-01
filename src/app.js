@@ -2,8 +2,8 @@
 
 'use strict';
 
-// load appUtilities module using commonJS syntax
-const util = require('./appUtilities.js');
+// load appUtilities module using es6 syntax (supported by webpack)
+import * as util from './appUtilities.js';
 
 (function () {
 	var messageBanner;
