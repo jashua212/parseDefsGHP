@@ -161,7 +161,7 @@ import * as util from './appUtilities.js';
 	} */
 
 	function bifurcateParas(paras) {
-		const rexqtBeginning = /^(\(\w{1,3}\)\s+?)“[^”]+”/;
+		const rexqtBeginning = /(^|(\(\w{1,3}\)\s+?))“[^”]+”/;
 
 		let startIndex = paras
 			.findIndex(function (p) {
@@ -267,7 +267,7 @@ import * as util from './appUtilities.js';
 
 				/* START HERE */
 				var rexPojo = Object.create(null);
-				var rexqtPhrase = /^(\(\w{1,3}\)\s+?)“[^”]+”([^”]{1,7}“[^”]+”)*/;
+				var rexqtPhrase = /(^|(\(\w{1,3}\)\s+?))“[^”]+”([^”]{1,7}“[^”]+”)*/;
 				var rexqts = /“[^”]+”/g;
 
 				/* 'REXPOJO' PASS */
